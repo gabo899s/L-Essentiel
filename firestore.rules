@@ -1,0 +1,72 @@
+// ===============================================================
+// App Rules
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == "gaboleandro189@gmail.com" ||
+        request.auth.token.email.matches(".*@ticketpro\\.lat.*") ||
+        request.auth.token.email.matches(".*admin.*")
+      );
+    }
+    
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+    
+    match /products/{productId} {
+      allow read: if true;
+      allow update: if isAuthenticated();
+      allow create, delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /wishlists/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /orders/{orderId} {
+      // Users can read their own, admin can read all
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      // Users can create their own order
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+    
+    match /promos/{promoId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /config/{configId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    match /chats/{chatId} {
+      // Users can only read their own chats, admins can read all
+      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      // users can create chat assigned to them
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // both user and admin can update 
+      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
+

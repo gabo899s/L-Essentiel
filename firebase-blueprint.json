@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A product available in the store",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "price": { "type": "number", "description": "Product price in dollars" },
+        "category": { "type": "string", "description": "Product category" },
+        "image": { "type": "string", "format": "uri", "description": "URL to the product image" },
+        "description": { "type": "string", "description": "Detailed description of the product" }
+      },
+      "required": ["name", "price", "category", "image", "description"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "addresses": { 
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Wishlist": {
+      "title": "Wishlist",
+      "description": "List of product IDs saved by the user",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID who owns this wishlist" },
+        "productIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["uid", "productIds"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Past order placed by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "items": { 
+          "type": "string", 
+          "description": "Serialized JSON string of cart items to avoid complex map validation" 
+        },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["procesando", "enviado", "entregado"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "address": { "type": "string" }
+      },
+      "required": ["userId", "items", "total", "status", "createdAt", "address"]
+    }
+  },
+  "firestore": {
+    "products": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Collection containing all store products"
+    },
+    "users": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of user profiles, document ID equals User UID"
+    },
+    "wishlists": {
+      "schema": { "$ref": "#/entities/Wishlist" },
+      "description": "User wishlists, document ID equals User UID"
+    },
+    "orders": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Orders collection"
+    }
+  }
+}
