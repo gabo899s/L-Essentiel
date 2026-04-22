@@ -25,7 +25,5 @@ COPY --from=builder /app/dist ./dist
 # COPY --from=builder /app/firebase-applet-config.json ./firebase-applet-config.json
 
 ENV NODE_ENV=production
-ENV PORT=3000
-EXPOSE 3000
 
 CMD ["npm", "start"]
