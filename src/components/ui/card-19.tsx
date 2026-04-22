@@ -76,6 +76,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <div className="w-full bg-[#EEEEEE] relative aspect-[4/5] overflow-hidden">
            <motion.img 
               src={image} 
+              loading="lazy"
               className="w-full h-full object-cover" 
               alt={title}
               initial={{ opacity: 0 }}

@@ -180,6 +180,7 @@ export default function App() {
   const [showScheduler, setShowScheduler] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [addressStr, setAddressStr] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
   const [couponCode, setCouponCode] = useState('');
   const [discountPercent, setDiscountPercent] = useState(0);
 
@@ -199,7 +200,9 @@ export default function App() {
 
   // --- ORDER PROCESSING ---
   const processSuccessfulOrder = async (method: string, transactionId: string) => {
-    if (!user) return;
+    const finalEmail = user ? user.email : guestEmail;
+    
+    if (!user && !finalEmail?.trim()) { showToast("Por favor ingresa un correo para recibir tu recibo."); return; }
     if (!addressStr.trim()) { showToast("Por favor ingresa una dirección de envío completa."); return; }
     
     setIsProcessingPayment(true);
@@ -211,8 +214,8 @@ export default function App() {
       const cartTotal = withDiscount * (1 + (storeConfig.taxRate / 100));
       
       const orderData = {
-        userId: user.uid,
-        userEmail: user.email,
+        userId: user ? user.uid : 'guest',
+        userEmail: finalEmail,
         items: JSON.stringify(cart),
         total: cartTotal,
         paymentMethod: method,
@@ -349,6 +352,15 @@ export default function App() {
       setIsProcessingPayment(false);
     }
   };
+
+  // --- SEO & DOCUMENT TITLE ---
+  useEffect(() => {
+    let title = "L'Essentiel - Boutique Minimalista";
+    if (view === 'product' && activeProduct) title = `${activeProduct.name} - L'Essentiel`;
+    if (view === 'cart') title = "Carrito - L'Essentiel";
+    if (view === 'profile') title = "Mi Cuenta - L'Essentiel";
+    document.title = title;
+  }, [view, activeProduct]);
 
   // --- PUSH NOTIFICATIONS ---
   useEffect(() => {
@@ -797,9 +809,9 @@ export default function App() {
 
     return (
      <>
-      <div className="fade-in animate-in fade-in duration-500 lg:flex lg:px-16 lg:py-12 px-8 py-8 gap-16 max-w-[1400px] mx-auto">
+      <div className="fade-in animate-in fade-in duration-500 lg:flex lg:px-16 lg:py-12 px-8 py-8 gap-16 max-w-[1400px] mx-auto items-start">
         {/* Hero */}
-      <section className="lg:flex-[1.2] flex flex-col justify-center mb-12 lg:mb-0">
+      <section className="lg:flex-[1.2] flex flex-col justify-start mb-12 lg:mb-0 lg:sticky lg:top-32">
         <span className="font-serif italic text-[1.2rem] mb-4 text-ink-light">Colección de autor</span>
         <h1 className="font-serif font-light text-[5rem] leading-[0.9] mb-8 text-ink tracking-tight">La simplicidad<br/>es máxima<br/>sofisticación</h1>
         <p className="text-[0.9rem] mt-4 text-ink-light max-w-[300px]">
@@ -1365,23 +1377,36 @@ export default function App() {
               </div>
 
               {/* Checkout Interactions */}
-              <div className="mb-6 flex flex-col gap-2">
-                  <p className="text-[0.7rem] uppercase tracking-widest text-ink font-bold mb-1">Tu Dirección para el Envío</p>
-                  <textarea 
-                      value={addressStr}
-                      onChange={(e) => setAddressStr(e.target.value)}
-                      required
-                      placeholder="Ej. Calle 123, Ciudad, País, Código Postal"
-                      className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink resize-none min-h-[80px]"
-                  />
+              <div className="mb-6 flex flex-col gap-4">
+                  {!user && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[0.7rem] uppercase tracking-widest text-ink font-bold mb-1">Tu Correo (Obligatorio para invitados)</p>
+                      <input 
+                          type="email"
+                          value={guestEmail}
+                          onChange={(e) => setGuestEmail(e.target.value)}
+                          placeholder="correo@ejemplo.com"
+                          className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink"
+                      />
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2">
+                      <p className="text-[0.7rem] uppercase tracking-widest text-ink font-bold mb-1">Tu Dirección para el Envío</p>
+                      <textarea 
+                          value={addressStr}
+                          onChange={(e) => setAddressStr(e.target.value)}
+                          required
+                          placeholder="Ej. Calle 123, Ciudad, País, Código Postal"
+                          className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink resize-none min-h-[80px]"
+                      />
+                  </div>
               </div>
 
               {!showPaymentOptions && (
                  <button 
                    onClick={() => {
-                     if (!user) {
-                       setShowLoginModal(true);
-                       showToast('Inicia sesión para finalizar compra');
+                     if (!user && !guestEmail.trim()) {
+                       showToast('Ingresa un correo para continuar como invitado o inicia sesión');
                        return;
                      }
                      if (!addressStr.trim() || addressStr.trim().length < 10) {
@@ -2937,37 +2962,37 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
                 )}
               </li>
 
-              <li className="hidden md:block hover:text-ink-light cursor-pointer transition-colors" onClick={() => { setActiveCategory('All'); setView('home'); }}>Colección</li>
+              <li className="hidden md:block hover:text-ink-light cursor-pointer transition-colors font-sans uppercase tracking-[0.1em] text-[0.75rem]" onClick={() => { setActiveCategory('All'); setView('home'); }}>COLECCIÓN</li>
               
               <li>
                 <button 
                   onClick={() => user ? setView('profile') : setShowLoginModal(true)} 
-                  className="hover:text-ink-light transition-colors flex items-center gap-1 cursor-pointer" 
+                  className="hover:text-ink-light transition-colors flex items-center gap-1 cursor-pointer font-sans uppercase tracking-[0.1em] text-[0.75rem]" 
                   aria-label="Wishlist"
                 >
-                   <Heart size={16} /> <span className="hidden md:inline">Favoritos</span>
+                   FAVORITOS
                 </button>
               </li>
 
               {user && (user.email === 'gaboleandro189@gmail.com' || user.email?.includes('ticketpro.lat') || user.email?.includes('admin')) && (
                 <li>
-                  <button onClick={() => setView('admin')} className="hover:text-ink-light transition-colors cursor-pointer flex items-center gap-1 font-bold text-ink" aria-label="Admin">
-                     <Settings size={14} /> ADMIN
+                  <button onClick={() => setView('admin')} className="hover:text-ink-light transition-colors cursor-pointer flex items-center gap-1 font-sans uppercase tracking-[0.1em] text-[0.75rem]" aria-label="Admin">
+                     ADMIN
                   </button>
                 </li>
               )}
 
               <li>
-                <button onClick={() => user ? setView('profile') : setShowLoginModal(true)} className="hover:text-ink-light transition-colors cursor-pointer" aria-label="Mi Cuenta">
-                   <UserIcon size={16} />
+                <button onClick={() => user ? setView('profile') : setShowLoginModal(true)} className="hover:text-ink-light transition-colors cursor-pointer font-sans uppercase tracking-[0.1em] text-[0.75rem]" aria-label="Mi Cuenta">
+                   PERFIL
                 </button>
               </li>
               <li>
                 <button 
-                  className="font-bold cursor-pointer transition-opacity text-ink hover:opacity-70 flex items-center gap-2"
+                  className="cursor-pointer transition-opacity text-ink hover:opacity-70 flex items-center gap-2 font-sans uppercase tracking-[0.1em] text-[0.75rem]"
                   onClick={() => setView('cart')}
                 >
-                  Carrito ({cartCount})
+                  CARRITO ({cartCount})
                 </button>
               </li>
             </ul>
