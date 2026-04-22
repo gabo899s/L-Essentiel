@@ -114,7 +114,11 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   // Filtering state
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [activeSize, setActiveSize] = useState<string>('All');
+  const [activeColor, setActiveColor] = useState<string>('All');
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
+  const availableSizes = useMemo(() => ['All', ...Array.from(new Set(products.flatMap(p => p.sizes || []).filter(s => s !== 'Única')))], [products]);
+  const availableColors = useMemo(() => ['All', ...Array.from(new Set(products.flatMap(p => p.colors || [])))], [products]);
 
   // Auth & Profile State
   const [user, setUser] = useState<User | null>(null);
@@ -722,6 +726,12 @@ export default function App() {
     if (activeCategory !== 'All') {
       result = result.filter(p => p.category === activeCategory);
     }
+    if (activeSize !== 'All') {
+      result = result.filter(p => p.sizes?.includes(activeSize));
+    }
+    if (activeColor !== 'All') {
+      result = result.filter(p => p.colors?.includes(activeColor));
+    }
     if (searchQuery) {
       result = result.filter(p => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -734,7 +744,7 @@ export default function App() {
       result = [...result].sort((a,b) => b.price - a.price);
     }
     return result;
-  }, [products, activeCategory, searchQuery, sortBy]);
+  }, [products, activeCategory, activeSize, activeColor, searchQuery, sortBy]);
 
   const HomeView = () => {
     const [testimonialText, setTestimonialText] = useState('');
@@ -775,17 +785,49 @@ export default function App() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-[0.75rem] uppercase tracking-[0.1em]">
-            <span className="text-ink-light">Ordenar por:</span>
-            <select 
-              className="bg-transparent border-none outline-none text-ink font-bold cursor-pointer"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-            >
-              <option value="new">Lo más nuevo</option>
-              <option value="price-asc">Precio: Menor a Mayor</option>
-              <option value="price-desc">Precio: Mayor a Menor</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-4 text-[0.75rem] uppercase tracking-[0.1em]">
+            <div className="flex items-center gap-2">
+              <span className="text-ink-light">Ordenar:</span>
+              <select 
+                className="bg-transparent border-none outline-none text-ink font-bold cursor-pointer"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+              >
+                <option value="new">Lo más nuevo</option>
+                <option value="price-asc">Precio: Menor a Mayor</option>
+                <option value="price-desc">Precio: Mayor a Menor</option>
+              </select>
+            </div>
+
+            {availableSizes.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-ink-light">Talla:</span>
+              <select 
+                className="bg-transparent border-none outline-none text-ink font-bold cursor-pointer"
+                value={activeSize}
+                onChange={(e) => setActiveSize(e.target.value)}
+              >
+                {availableSizes.map(size => (
+                  <option key={size} value={size}>{size === 'All' ? 'Todas' : size}</option>
+                ))}
+              </select>
+            </div>
+            )}
+
+            {availableColors.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-ink-light">Color:</span>
+              <select 
+                className="bg-transparent border-none outline-none text-ink font-bold cursor-pointer"
+                value={activeColor}
+                onChange={(e) => setActiveColor(e.target.value)}
+              >
+                {availableColors.map(color => (
+                  <option key={color} value={color}>{color === 'All' ? 'Todos' : color}</option>
+                ))}
+              </select>
+            </div>
+            )}
           </div>
         </div>
       </section>
