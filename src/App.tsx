@@ -5,7 +5,44 @@ import { GoogleAuthProvider, TwitterAuthProvider, signInWithPopup, onAuthStateCh
 import { GoogleGenAI } from "@google/genai";
 import { db, auth } from './firebase';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let geminiClient: GoogleGenAI | null = null;
+const getAi = () => {
+   if (!geminiClient) {
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) {
+         console.error("GEMINI_API_KEY no disponible localmente. Conectando vía proxy seguro del servidor.");
+         // Fallback devuelto para usar el proxy del backend (Hyperlift)
+         return {
+           models: {
+              generateContent: async (params: any) => {
+                 try {
+                     const res = await fetch('/api/gemini-proxy', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ params })
+                     });
+                     if (!res.ok) throw new Error("Proxy response failed");
+                     const json = await res.json();
+                     return { text: json.text };
+                 } catch (err) {
+                     console.error("Proxy routing falló", err);
+                     return { text: '[]' };
+                 }
+              }
+           }
+         } as unknown as GoogleGenAI;
+      }
+      geminiClient = new GoogleGenAI({ apiKey: key });
+   }
+   return geminiClient;
+};
+
+// Getter global 'ai' con proxy para evitar re-factoreos masivos.
+const ai = new Proxy({} as GoogleGenAI, {
+  get: (target, prop) => {
+    return (getAi() as any)[prop];
+  }
+});
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Toaster } from "sonner";
 import { OrderTracking } from "@/components/ui/order-tracking";

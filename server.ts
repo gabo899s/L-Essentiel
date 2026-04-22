@@ -264,6 +264,22 @@ async function startServer() {
     }
   });
 
+  // Proxy genérico para peticiones que vienen del cliente (e.g. Búsqueda y Mapas)
+  app.post("/api/gemini-proxy", async (req, res) => {
+    try {
+        const { params } = req.body;
+        const apiKey = process.env.GEMINI_API_KEY?.trim();
+        if (!apiKey) return res.status(500).json({ text: "[]" });
+
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent(params);
+        res.json({ text: response.text });
+    } catch (error) {
+        console.error("Proxy AI Error:", error);
+        res.status(500).json({ text: "[]" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
