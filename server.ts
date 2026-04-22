@@ -9,7 +9,8 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  // Usa 8080 por defecto en producción (requerido por Hyperlift), o 3000 para entorno de desarrollo local.
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : (process.env.NODE_ENV === 'production' ? 8080 : 3000);
 
   app.use(express.json());
 
