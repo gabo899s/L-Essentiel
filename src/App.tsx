@@ -26,6 +26,7 @@ const getAi = () => {
                      return { text: json.text };
                  } catch (err) {
                      console.error("Proxy routing falló", err);
+                     import('sonner').then(({ toast }) => toast.error('No pudimos conectar con nuestro sistema de Inteligencia Artificial.', { description: 'Intenta nuevamente en unos instantes.' }));
                      return { text: '[]' };
                  }
               }
@@ -349,8 +350,8 @@ export default function App() {
       } else {
          throw new Error(data.error);
       }
-    } catch (e) {
-      showToast('No pudimos conectar con Tilopay.');
+    } catch (e: any) {
+      import('sonner').then(({ toast }) => toast.error('Error al procesar el pago', { description: e?.message || 'No pudimos conectar con la plataforma de pago. Por favor intenta más tarde.' }));
       setIsProcessingPayment(false);
     }
   };
@@ -403,6 +404,7 @@ export default function App() {
       },
       (error) => {
         console.error("Firestore onSnapshot Error:", error);
+        import('sonner').then(({ toast }) => toast.error('No se pudieron cargar los productos correctamente.', { description: 'Revisando tu conexión o inténtalo más tarde.' }));
         setProducts(INITIAL_PRODUCTS); // Fallback on db error
       }
     );
@@ -542,10 +544,10 @@ export default function App() {
       showToast('Código de 6 dígitos enviado a tu correo');
     } catch (err: any) {
       console.error("Auth Register Error:", err);
-      if (err.code === 'auth/email-already-in-use') showToast('El correo ya está registrado');
-      else if (err.code === 'auth/weak-password') showToast('La contraseña debe tener al menos 6 caracteres');
-      else if (err.code === 'auth/operation-not-allowed') showToast('Debes habilitar "Correo/Contraseña" en Firebase Console');
-      else showToast(`Error registrando cuenta: ${err.message}`);
+      if (err.code === 'auth/email-already-in-use') import('sonner').then(({ toast }) => toast.error('Correo ya registrado', { description: 'Intenta iniciar sesión o usa otro correo electrónico' }));
+      else if (err.code === 'auth/weak-password') import('sonner').then(({ toast }) => toast.error('Contraseña débil', { description: 'La contraseña debe tener al menos 6 caracteres' }));
+      else if (err.code === 'auth/operation-not-allowed') import('sonner').then(({ toast }) => toast.error('Registro no disponible', { description: 'Por favor, contacta con el administrador.' }));
+      else import('sonner').then(({ toast }) => toast.error('Error al registrar cuenta', { description: 'Revisa tu conexión o intenta más tarde.' }));
     }
   };
 
@@ -600,9 +602,9 @@ export default function App() {
       showToast('Sesión iniciada correctamente');
     } catch(err: any) {
       console.error("Auth Login Error:", err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') showToast('Credenciales incorrectas');
-      else if (err.code === 'auth/operation-not-allowed') showToast('Debes habilitar "Correo/Contraseña" en Firebase Console');
-      else showToast(`Error iniciando sesión: ${err.message}`);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') import('sonner').then(({ toast }) => toast.error('Credenciales incorrectas', { description: 'Revisa tu correo o contraseña e intenta nuevamente.' }));
+      else if (err.code === 'auth/operation-not-allowed') import('sonner').then(({ toast }) => toast.error('Inicio de sesión no disponible', { description: 'Por favor, contacta con el administrador.' }));
+      else import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión', { description: 'Hubo un problema al validar tus datos. Por favor, intenta más tarde.' }));
     }
   };
 
@@ -636,26 +638,38 @@ export default function App() {
 
   const loginGoogle = async () => {
     try {
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== 'store.maesrp.lat') {
+         import('sonner').then(({ toast }) => toast.info('Redirigiendo a entorno seguro para inicio de sesión...'));
+         setTimeout(() => window.location.href = 'https://store.maesrp.lat', 1000);
+         return;
+      }
       const provider = new GoogleAuthProvider();
       const cred = await signInWithPopup(auth, provider);
       setShowLoginModal(false);
       if (cred.user.email) sendLoginAlert(cred.user.email);
       showToast('Sesión iniciada correctamente');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      showToast('Error al iniciar sesión');
+      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión con Google', { description: e?.message || 'Intenta nuevamente más tarde.' }));
     }
   };
 
   const loginTwitter = async () => {
     try {
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== 'store.maesrp.lat') {
+         import('sonner').then(({ toast }) => toast.info('Redirigiendo a entorno seguro para inicio de sesión...'));
+         setTimeout(() => window.location.href = 'https://store.maesrp.lat', 1000);
+         return;
+      }
       const provider = new TwitterAuthProvider();
       await signInWithPopup(auth, provider);
       setShowLoginModal(false);
       showToast('Sesión iniciada correctamente');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      showToast('Error. Recuerda configurar las llaves de X en Firebase Auth');
+      let desc = 'Recuerda configurar las llaves de X en Firebase Auth';
+      if (e?.code === 'auth/popup-closed-by-user') desc = 'El popup de inicio de sesión fue cerrado';
+      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión', { description: desc }));
     }
   };
 
