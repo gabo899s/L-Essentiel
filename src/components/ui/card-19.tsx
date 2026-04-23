@@ -1,6 +1,6 @@
 import * as React from "react";
 import { motion } from "framer-motion";
-import { Star } from "lucide-react";
+import { Star, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +17,8 @@ interface ProductCardProps {
   onAddToCart: (details: { color: string; size: string }) => void;
   className?: string;
   image?: string;
+  isWishlisted?: boolean;
+  onToggleWishlist?: (e: React.MouseEvent) => void;
 }
 
 const StarRating: React.FC<{ rating: number }> = ({ rating }) => {
@@ -53,6 +55,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
   image,
   onAddToCart,
   className,
+  isWishlisted,
+  onToggleWishlist,
 }) => {
   const [selectedColor, setSelectedColor] = React.useState(initialColor);
   const [selectedSize, setSelectedSize] = React.useState(initialSize);
@@ -73,17 +77,25 @@ const ProductCard: React.FC<ProductCardProps> = ({
       )}
     >
       {image && (
-        <div className="w-full bg-[#EEEEEE] relative aspect-[4/5] overflow-hidden">
+        <div className="w-full bg-[#EEEEEE] relative aspect-[4/5] overflow-hidden group">
            <motion.img 
               src={image} 
               loading="lazy"
-              className="w-full h-full object-cover" 
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
               alt={title}
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true, margin: "100px" }}
               transition={{ duration: 0.8 }}
             />
+            {onToggleWishlist && (
+               <button 
+                 onClick={onToggleWishlist}
+                 className="absolute top-4 right-4 z-10 p-2 bg-white/70 backdrop-blur rounded-full hover:bg-white text-ink transition-colors shadow-sm"
+               >
+                 <Heart size={18} className={isWishlisted ? "fill-ink text-ink" : "text-ink"} />
+               </button>
+            )}
         </div>
       )}
       <div className="p-6">

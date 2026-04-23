@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, Search, Heart, User as UserIcon, X, LogOut, Settings, CreditCard, MessageCircle, Send, Star, Clock, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Trash2, Plus, Minus, Search, Heart, User as UserIcon, X, LogOut, Settings, CreditCard, MessageCircle, Send, Star, Clock, Image as ImageIcon, Sparkles, Menu } from 'lucide-react';
 import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, addDoc, deleteDoc, query, orderBy, where, serverTimestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, TwitterAuthProvider, signInWithPopup, onAuthStateChanged, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { GoogleGenAI } from "@google/genai";
@@ -50,6 +50,7 @@ import { UserProfileSidebar } from "@/components/ui/menu";
 import { ProductCard } from "@/components/ui/card-19";
 import { DeliveryScheduler } from "@/components/ui/delivery-scheduler";
 import { motion, AnimatePresence } from 'motion/react';
+import { Helmet, HelmetProvider } from 'react-helmet-async';
 
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -171,6 +172,7 @@ export default function App() {
   // Search & Sort State
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchingAI, setIsSearchingAI] = useState(false);
   const [aiSearchResults, setAiSearchResults] = useState<Product[] | null>(null);
   const [sortBy, setSortBy] = useState<'new'|'price-asc'|'price-desc'>('new');
@@ -352,15 +354,6 @@ export default function App() {
       setIsProcessingPayment(false);
     }
   };
-
-  // --- SEO & DOCUMENT TITLE ---
-  useEffect(() => {
-    let title = "L'Essentiel - Boutique Minimalista";
-    if (view === 'product' && activeProduct) title = `${activeProduct.name} - L'Essentiel`;
-    if (view === 'cart') title = "Carrito - L'Essentiel";
-    if (view === 'profile') title = "Mi Cuenta - L'Essentiel";
-    document.title = title;
-  }, [view, activeProduct]);
 
   // --- PUSH NOTIFICATIONS ---
   useEffect(() => {
@@ -672,22 +665,6 @@ export default function App() {
     showToast('Sesión cerrada');
   };
 
-  const toggleWishlist = async (productId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!user) {
-      setShowLoginModal(true);
-      return;
-    }
-    const wlRef = doc(db, 'wishlists', user.uid);
-    if (wishlist.includes(productId)) {
-      await updateDoc(wlRef, { productIds: arrayRemove(productId) });
-      showToast('Removido de tu lista de deseos');
-    } else {
-      await updateDoc(wlRef, { productIds: arrayUnion(productId) });
-      showToast('Añadido a tu lista de deseos');
-    }
-  };
-
   // Show a toast message
   const showToast = (message: string) => {
     import('sonner').then(({ toast }) => {
@@ -739,6 +716,32 @@ export default function App() {
     setActiveProduct(product);
     setView('product');
     window.scrollTo(0, 0);
+  };
+
+  const toggleWishlist = async (productId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!user) {
+      showToast('Por favor, inicia sesión para guardar en favoritos.');
+      setShowLoginModal(true);
+      return;
+    }
+    const isWl = wishlist.includes(productId);
+    const newWl = isWl ? wishlist.filter(id => id !== productId) : [...wishlist, productId];
+    setWishlist(newWl); // Optimistic UI update
+    
+    try {
+      if (isWl) {
+        await updateDoc(doc(db, 'wishlists', user.uid), { productIds: arrayRemove(productId) });
+        showToast('Producto eliminado de favoritos.');
+      } else {
+        await updateDoc(doc(db, 'wishlists', user.uid), { productIds: arrayUnion(productId) });
+        showToast('Producto guardado en favoritos. Te notificaremos si se agota y vuelve a estar disponible.');
+      }
+    } catch (e) {
+      // Revert if error
+      setWishlist(wishlist);
+      showToast('Error al actualizar favoritos.');
+    }
   };
 
   const addToCart = (product: Product, size?: string, color?: string) => {
@@ -809,14 +812,49 @@ export default function App() {
 
     return (
      <>
-      <div className="fade-in animate-in fade-in duration-500 lg:flex lg:px-16 lg:py-12 px-8 py-8 gap-16 max-w-[1400px] mx-auto items-start">
-        {/* Hero */}
-      <section className="lg:flex-[1.2] flex flex-col justify-start mb-12 lg:mb-0 lg:sticky lg:top-32">
-        <span className="font-serif italic text-[1.2rem] mb-4 text-ink-light">Colección de autor</span>
-        <h1 className="font-serif font-light text-[5rem] leading-[0.9] mb-8 text-ink tracking-tight">La simplicidad<br/>es máxima<br/>sofisticación</h1>
-        <p className="text-[0.9rem] mt-4 text-ink-light max-w-[300px]">
-          Otoño / Invierno. Una colección inspirada en el silencio y la simplicidad de lo cotidiano.
-        </p>
+      {/* Promotional Impact Banner */}
+      <div className="w-full bg-[#F5F5F0] border-b border-black/5 relative overflow-hidden flex items-center min-h-[60vh] md:min-h-[75vh]">
+          {/* Subtle minimal background element */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] border border-ink/5 rotate-3 pointer-events-none hidden md:block"></div>
+          
+          <div className="relative z-10 container mx-auto px-8 md:px-16 flex flex-col items-center justify-center text-center">
+             <motion.span 
+               initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+               className="font-sans uppercase tracking-[0.2em] text-[0.75rem] text-ink-light mb-6 border border-ink/10 px-4 py-2"
+             >
+               Nueva Colección Otoño • Invierno
+             </motion.span>
+             
+             <motion.h1 
+               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.1 }}
+               className="font-serif font-light text-[3.5rem] md:text-[6rem] leading-[1] text-ink tracking-tight mb-8 max-w-4xl"
+             >
+               La simplicidad<br/><span className="italic text-ink/70">es máxima</span> sofisticación
+             </motion.h1>
+
+             <motion.p 
+               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.3 }}
+               className="font-sans text-[0.95rem] text-ink-light max-w-lg mb-12 leading-relaxed"
+             >
+               Inspirados en el silencio de lo cotidiano. Descubre líneas puras, telas excepcionales y una estética que trasciende las temporadas.
+             </motion.p>
+             
+             <motion.button 
+               initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.5 }}
+               onClick={() => {
+                  document.getElementById('catalog-section')?.scrollIntoView({ behavior: 'smooth' });
+               }}
+               className="bg-ink text-white py-[1.2rem] px-12 uppercase tracking-[0.1em] text-[0.8rem] font-bold hover:bg-white hover:text-ink border border-ink transition-all duration-300 shadow-xl shadow-ink/10 cursor-pointer"
+             >
+               Descubre la Colección
+             </motion.button>
+          </div>
+      </div>
+
+      <div id="catalog-section" className="fade-in animate-in fade-in duration-500 lg:flex lg:px-16 lg:py-16 px-8 py-10 gap-16 max-w-[1400px] mx-auto items-start">
+        {/* Sidebar Filters */}
+      <section className="lg:flex-[0.8] flex flex-col justify-start mb-12 lg:mb-0 lg:sticky lg:top-32">
+        <h2 className="font-serif italic text-[1.8rem] mb-6 text-ink">Catálogo</h2>
 
         {/* Category Filters and Sort */}
         <div className="mt-12 flex flex-col gap-6">
@@ -888,14 +926,6 @@ export default function App() {
         )}
         {processedProducts.map(product => (
            <div key={product.id} className="relative cursor-pointer break-inside-avoid" onClick={() => openProduct(product)}>
-            <div className="absolute top-8 right-6 z-10">
-              <button 
-                  onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id, e); }}
-                  className="p-2 bg-white/80 backdrop-blur-sm rounded-full hover:bg-white transition-colors border border-black/5"
-                >
-                  <Heart size={16} className={wishlist.includes(product.id) ? "fill-ink" : ""} />
-                </button>
-            </div>
             <ProductCard
               title={product.name}
               price={product.price}
@@ -907,6 +937,8 @@ export default function App() {
               sizes={product.sizes || []}
               initialColor={product.colors?.[0] || ''}
               initialSize={product.sizes?.[0] || 'Única'}
+              isWishlisted={wishlist.includes(product.id)}
+              onToggleWishlist={(e) => toggleWishlist(product.id, e)}
               className="max-w-full rounded-none border-black/5 shadow-none hover:shadow-lg transition-shadow bg-cream"
               onAddToCart={(details) => {
                  setTimeout(() => addToCart(product, details.size, details.color), 0); 
@@ -1245,31 +1277,33 @@ export default function App() {
 
         {/* Related Products */}
         {relatedProducts.length > 0 && (
-          <div className="mt-24 pt-16 border-t border-black/5">
-            <h3 className="font-serif italic text-[2rem] text-ink mb-12">Podría interesarte</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {relatedProducts.map(product => (
-                <div key={product.id} className="cursor-pointer" onClick={() => openProduct(product)}>
-                  <ProductCard
-                    title={product.name}
-                    price={product.price}
-                    currency="$"
-                    image={product.image}
-                    rating={product.reviews ? product.reviews.reduce((a, b) => a + b.rating, 0) / product.reviews.length : 5}
-                    reviewsCount={product.reviews?.length || 0}
-                    colors={product.colors || []}
-                    sizes={product.sizes || []}
-                    initialColor={product.colors?.[0] || ''}
-                    initialSize={product.sizes?.[0] || 'Única'}
-                    className="max-w-full rounded-none border-black/5 shadow-none hover:shadow-lg transition-shadow bg-cream"
-                    onAddToCart={(details) => {
+           <div className="mt-24 pt-16 border-t border-black/5">
+             <h3 className="font-serif italic text-[2rem] text-ink mb-12">Podría interesarte</h3>
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+               {relatedProducts.map(product => (
+                 <div key={product.id} className="cursor-pointer" onClick={() => openProduct(product)}>
+                   <ProductCard
+                     title={product.name}
+                     price={product.price}
+                     currency="$"
+                     image={product.image}
+                     rating={product.reviews ? product.reviews.reduce((a, b) => a + b.rating, 0) / product.reviews.length : 5}
+                     reviewsCount={product.reviews?.length || 0}
+                     colors={product.colors || []}
+                     sizes={product.sizes || []}
+                     initialColor={product.colors?.[0] || ''}
+                     initialSize={product.sizes?.[0] || 'Única'}
+                     isWishlisted={wishlist.includes(product.id)}
+                     onToggleWishlist={(e) => toggleWishlist(product.id, e)}
+                     className="max-w-full rounded-none border-black/5 shadow-none hover:shadow-lg transition-shadow bg-cream"
+                     onAddToCart={(details) => {
                        setTimeout(() => addToCart(product, details.size, details.color), 0); 
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+                     }}
+                   />
+                 </div>
+               ))}
+             </div>
+           </div>
         )}
       </div>
     );
@@ -1288,14 +1322,19 @@ export default function App() {
       </div>
 
       {cart.length === 0 ? (
-        <div className="text-center py-20 bg-white border border-transparent">
-          <p className="font-serif italic text-xl text-ink-light mb-6">Tu carrito está vacío.</p>
-          <button 
-            onClick={() => setView('home')}
-            className="border border-ink py-[0.8rem] px-8 uppercase tracking-[0.1em] text-[0.7rem] hover:bg-ink hover:text-white transition-colors cursor-pointer"
-          >
-            Descubrir productos
-          </button>
+        <div className="flex flex-col items-center justify-center py-24 bg-[#F5F5F0]/40 border border-black/5 rounded-2xl animate-in fade-in zoom-in-95 duration-500">
+           <ShoppingCart size={48} className="text-ink/20 mb-6" strokeWidth={1} />
+           <h3 className="font-serif text-[1.8rem] text-ink mb-3 text-center">Tu carrito se siente ligero</h3>
+           <p className="text-[0.9rem] text-ink-light mb-8 text-center max-w-md px-4 font-sans">
+             Aún no has añadido ningún artículo. Sumérgete en nuestra colección y encuentra esa pieza esencial que estabas buscando.
+           </p>
+           <button 
+             onClick={() => setView('home')}
+             className="bg-ink text-white py-[1.1rem] px-10 uppercase tracking-[0.1em] text-[0.75rem] font-bold hover:bg-black transition-all hover:scale-105 cursor-pointer shadow-lg outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ink"
+             aria-label="Volver a la colección para descubrir productos"
+           >
+             Explorar la Colección
+           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
@@ -1685,10 +1724,16 @@ export default function App() {
               )}
             </section>
 
-            <section>
+            <section id="wishlist">
               <h2 className="font-serif italic text-[1.5rem] mb-6 text-ink">Lista de Deseos</h2>
               {savedProducts.length === 0 ? (
-                <p className="text-[0.85rem] text-ink-light italic">Tu lista de deseos está vacía.</p>
+                <div className="text-center py-12 bg-[#F5F5F0]/40 border border-black/5 rounded-2xl">
+                  <Heart size={32} className="text-ink/20 mx-auto mb-4" strokeWidth={1} />
+                  <p className="text-[0.9rem] text-ink-light">Tu lista de deseos se encuentra vacía.</p>
+                  <button onClick={() => { setActiveCategory('All'); setView('home'); }} className="mt-6 text-ink text-[0.7rem] uppercase tracking-widest font-bold hover:underline cursor-pointer">
+                     Ver colección
+                  </button>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {savedProducts.map(product => (
@@ -1772,7 +1817,42 @@ export default function App() {
           sizes: sizesInput.split(',').map(s => s.trim()).filter(s => s),
           colors: colorsInput.split(',').map(c => c.trim()).filter(c => c)
         } as Product;
+        
+        const existingProduct = products.find(p => p.id === productToAdd.id);
+        const isRestock = existingProduct && existingProduct.stock === 0 && productToAdd.stock > 0;
+        
         await setDoc(doc(db, 'products', productToAdd.id), productToAdd);
+        
+        if (isRestock) {
+          import('firebase/firestore').then(async ({ collection, getDocs, where, query, doc, getDoc }) => {
+            try {
+              // Find all users who have this product in their wishlist
+              // Note: array-contains requires a specific query
+              const wlSnap = await getDocs(query(collection(db, 'wishlists'), where('productIds', 'array-contains', productToAdd.id)));
+              if (!wlSnap.empty) {
+                showToast(`Notificando restock a ${wlSnap.docs.length} usuario(s)...`);
+                for (const wlDoc of wlSnap.docs) {
+                  const uDoc = await getDoc(doc(db, 'users', wlDoc.id));
+                  if (uDoc.exists() && uDoc.data().email) {
+                    await fetch('/api/send-email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        to: uDoc.data().email,
+                        fromType: 'hello',
+                        subject: `¡${productToAdd.name} vuelve a estar en stock!`,
+                        text: `El artículo que esperabas está de regreso: ${productToAdd.name}. Solo hay ${productToAdd.stock} disponibles. Entra a L'Essentiel para conseguir el tuyo.`,
+                      })
+                    }).catch(()=>null);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Restock notify error:", err);
+            }
+          });
+        }
+
         setIsAddingProduct(false);
         setNewProduct({ name: '', price: 0, category: '', image: '', description: '', stock: 0, sizes: [], colors: [] });
         setSizesInput('');
@@ -2617,6 +2697,10 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
     const handleSendMessage = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!inputMessage.trim() || !currentChat || !user) return;
+      if (currentChat.messages.length > 50) {
+         showToast('Límite de mensajes alcanzado en este chat. Por favor inicia otra consulta.');
+         return;
+      }
       
       const userMsg: ChatMessage = {
         id: Date.now().toString(),
@@ -2791,12 +2875,18 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
                            <div className="bg-green-50 text-green-800 text-[0.75rem] p-2 text-center rounded">Conversando con {currentChat.assignedAdmin}</div>
                         )}
                         {currentChat.messages.map((m, idx) => (
-                           <div key={idx} className={`max-w-[85%] p-3 rounded-lg text-[0.85rem] flex flex-col ${m.sender === 'user' ? 'bg-ink text-white align-self-end self-end rounded-tr-none' : 'bg-gray-200 text-ink self-start rounded-tl-none'}`}>
+                           <div key={idx} className={`max-w-[85%] p-3 text-[0.85rem] flex flex-col shadow-sm ${m.sender === 'user' ? 'bg-ink text-white self-end rounded-t-2xl rounded-bl-2xl rounded-br-sm' : 'bg-white border border-black/5 text-ink self-start rounded-t-2xl rounded-br-2xl rounded-bl-sm'}`}>
                               {m.imageUrl && <img src={m.imageUrl} alt="attached" className="max-w-full rounded mb-1" />}
-                              {m.text && <span>{m.text}</span>}
+                              {m.text && <span className="leading-relaxed">{m.text}</span>}
                            </div>
                         ))}
-                        {isLoading && <div className="text-[0.7rem] text-ink-light italic">Escribiendo...</div>}
+                        {isLoading && (
+                           <div className="bg-white border border-black/5 text-ink self-start rounded-t-2xl rounded-br-2xl rounded-bl-sm p-3 shadow-sm flex items-center gap-1 max-w-[85%] mb-2">
+                              <div className="w-1.5 h-1.5 bg-ink/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <div className="w-1.5 h-1.5 bg-ink/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <div className="w-1.5 h-1.5 bg-ink/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                           </div>
+                        )}
                         
                         {currentChat.status === 'closed' && (
                            <div className="mt-4 p-4 border border-black/10 bg-white flex flex-col items-center text-center gap-2">
@@ -2826,11 +2916,12 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
                               value={inputMessage}
                               onChange={e => setInputMessage(e.target.value)}
                               placeholder="Escribe un mensaje..."
-                              className="flex-1 bg-transparent text-[0.85rem] outline-none placeholder:text-ink-light"
+                              className="flex-1 bg-[#F5F5F0] rounded-full px-4 py-2 text-[0.85rem] outline-none placeholder:text-ink/40 focus:ring-1 focus:ring-ink/20"
                               disabled={isLoading}
+                              maxLength={400}
                            />
-                           <button type="submit" disabled={isLoading||!inputMessage.trim()} className="p-2 bg-ink text-white hover:bg-black disabled:opacity-50 transition-colors cursor-pointer">
-                              <Send size={14} />
+                           <button type="submit" disabled={isLoading||!inputMessage.trim()} className="p-2.5 rounded-full bg-ink text-white hover:bg-black disabled:opacity-50 transition-colors cursor-pointer shadow-md">
+                              <Send size={16} className={isLoading ? "opacity-50" : ""} />
                            </button>
                          </form>
                       )}
@@ -2855,8 +2946,23 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans selection:bg-ink selection:text-white">
-      {/* Navbar */}
+    <HelmetProvider>
+      <div className="min-h-screen flex flex-col font-sans selection:bg-ink selection:text-white">
+        <Helmet>
+           <title>{
+              view === 'product' && activeProduct ? `${activeProduct.name} - L'Essentiel` :
+              view === 'cart' ? "Carrito - L'Essentiel" :
+              view === 'profile' ? "Mi Cuenta - L'Essentiel" :
+              "L'Essentiel - Boutique Minimalista"
+           }</title>
+           <meta name="description" content={activeProduct ? activeProduct.description : "Una colección inspirada en el silencio y la simplicidad de lo cotidiano."} />
+           <meta property="og:title" content={activeProduct ? activeProduct.name : "L'Essentiel - Boutique Minimalista"} />
+           <meta property="og:description" content={activeProduct ? activeProduct.description : "Inspirados en el silencio y la simplicidad."} />
+           {activeProduct && <meta property="og:image" content={activeProduct.image} />}
+           <meta property="og:type" content={activeProduct ? "product" : "website"} />
+        </Helmet>
+
+        {/* Navbar */}
       <header className="sticky top-0 z-50 bg-cream/90 backdrop-blur-md border-b border-black/5">
         <div className="py-8 px-8 md:px-16 flex items-center justify-between">
           <button 
@@ -2866,8 +2972,9 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
             L'Essentiel
           </button>
 
-          <nav>
-            <ul className="flex items-center gap-8 md:gap-12 text-[0.75rem] uppercase tracking-[0.1em]">
+          <nav className="flex items-center gap-6 md:gap-12 text-[0.75rem] uppercase tracking-[0.1em]">
+            {/* Desktop and Mobile: Search and Cart */}
+            <ul className="flex items-center gap-6 md:gap-12">
                {/* Search bar toggle & input */}
               <li className="flex items-center relative">
                 {isSearchOpen ? (
@@ -2964,7 +3071,7 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
 
               <li className="hidden md:block hover:text-ink-light cursor-pointer transition-colors font-sans uppercase tracking-[0.1em] text-[0.75rem]" onClick={() => { setActiveCategory('All'); setView('home'); }}>COLECCIÓN</li>
               
-              <li>
+              <li className="hidden md:block">
                 <button 
                   onClick={() => user ? setView('profile') : setShowLoginModal(true)} 
                   className="hover:text-ink-light transition-colors flex items-center gap-1 cursor-pointer font-sans uppercase tracking-[0.1em] text-[0.75rem]" 
@@ -2975,14 +3082,14 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
               </li>
 
               {user && (user.email === 'gaboleandro189@gmail.com' || user.email?.includes('ticketpro.lat') || user.email?.includes('admin')) && (
-                <li>
+                <li className="hidden md:block">
                   <button onClick={() => setView('admin')} className="hover:text-ink-light transition-colors cursor-pointer flex items-center gap-1 font-sans uppercase tracking-[0.1em] text-[0.75rem]" aria-label="Admin">
                      ADMIN
                   </button>
                 </li>
               )}
 
-              <li>
+              <li className="hidden md:block">
                 <button onClick={() => user ? setView('profile') : setShowLoginModal(true)} className="hover:text-ink-light transition-colors cursor-pointer font-sans uppercase tracking-[0.1em] text-[0.75rem]" aria-label="Mi Cuenta">
                    PERFIL
                 </button>
@@ -2992,12 +3099,56 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
                   className="cursor-pointer transition-opacity text-ink hover:opacity-70 flex items-center gap-2 font-sans uppercase tracking-[0.1em] text-[0.75rem]"
                   onClick={() => setView('cart')}
                 >
-                  CARRITO ({cartCount})
+                  <span className="hidden md:inline">CARRITO</span>
+                  <ShoppingCart size={16} className="md:hidden" />
+                  ({cartCount})
                 </button>
+              </li>
+              <li className="md:hidden flex items-center">
+                 <button onClick={() => setIsMobileMenuOpen(true)} className="cursor-pointer">
+                    <Menu size={20} />
+                 </button>
               </li>
             </ul>
           </nav>
         </div>
+
+        {/* Mobile Menu Overlay */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+             <>
+               <motion.div 
+                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                 onClick={() => setIsMobileMenuOpen(false)}
+                 className="fixed inset-0 bg-black/40 z-[90] md:hidden"
+               />
+               <motion.div 
+                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                 className="fixed top-0 right-0 h-full w-[280px] bg-white z-[100] shadow-2xl p-8 flex flex-col md:hidden"
+               >
+                  <div className="flex justify-end mb-8">
+                     <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 -mr-2 cursor-pointer">
+                       <X size={20} />
+                     </button>
+                  </div>
+                  <div className="flex flex-col gap-6 text-[0.9rem] uppercase tracking-[0.1em] font-sans">
+                     <button onClick={() => { setActiveCategory('All'); setView('home'); setIsMobileMenuOpen(false); }} className="text-left font-bold border-b border-black/5 pb-2">Colección</button>
+                     <button onClick={() => { user ? setView('profile') : setShowLoginModal(true); setIsMobileMenuOpen(false); }} className="text-left border-b border-black/5 pb-2 flex items-center gap-2">
+                        <Heart size={16} /> Favoritos
+                     </button>
+                     <button onClick={() => { user ? setView('profile') : setShowLoginModal(true); setIsMobileMenuOpen(false); }} className="text-left border-b border-black/5 pb-2 flex items-center gap-2">
+                        <UserIcon size={16} /> Mi Perfil
+                     </button>
+                     {user && (user.email === 'gaboleandro189@gmail.com' || user.email?.includes('ticketpro.lat') || user.email?.includes('admin')) && (
+                       <button onClick={() => { setView('admin'); setIsMobileMenuOpen(false); }} className="text-left border-b border-black/5 pb-2 flex items-center gap-2 font-bold text-ink hover:opacity-70">
+                          <Settings size={16} /> Admin
+                       </button>
+                     )}
+                  </div>
+               </motion.div>
+             </>
+          )}
+        </AnimatePresence>
       </header>
 
       {/* Main Content Area */}
@@ -3209,5 +3360,6 @@ Haz que el copy del email sea atractivo. DEVUELVE SOLO EL CÓDIGO HTML PURO (sin
 
       <Toaster position="bottom-center" />
     </div>
+    </HelmetProvider>
   );
 }

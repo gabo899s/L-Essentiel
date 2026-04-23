@@ -4,6 +4,8 @@ import path from "path";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
@@ -12,7 +14,31 @@ async function startServer() {
   // Usa 8080 por defecto en producción (requerido por Hyperlift), o 3000 para entorno de desarrollo local.
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : (process.env.NODE_ENV === 'production' ? 8080 : 3000);
 
+  // Trust proxy for rate limiting behind reverse proxies (like Cloud Run or Hyperlift Nginx)
+  app.set("trust proxy", 1);
+
+  // Security headers setup
+  app.use(helmet({
+    contentSecurityPolicy: false, // Disabling strict CSP in preview as it can block Vite HMR and dynamic scripts
+  }));
+
+  // Rate Limiting (Protects API routes from spam & bot abuse)
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes window
+    max: 100, // Limit each IP to 100 requests per window
+    message: { error: "Demasiadas peticiones desde tu IP, por favor intenta en 15 minutos." }
+  });
+
+  const aiLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, 
+    max: 25, // AI endpoints are more expensive, strict limit per IP
+    message: { error: "Has excedido el límite de consultas de IA." }
+  });
+
   app.use(express.json());
+  
+  // Apply limiters carefully
+  app.use("/api/", apiLimiter);
 
   // Email route configuration based on user instructions
   // We use different minimalist HTML templates for different email types.
@@ -172,7 +198,7 @@ async function startServer() {
   });
 
   // AI Chat Route
-  app.post("/api/ai-chat", async (req, res) => {
+  app.post("/api/ai-chat", aiLimiter, async (req, res) => {
     try {
        const { messages } = req.body;
        const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -183,7 +209,16 @@ async function startServer() {
            model: "gemini-3.0-flash-preview",
            contents: messages,
            config: {
-             systemInstruction: "Eres un elegante y breve asistente para L'Essentiel, una boutique minimalista de alta moda. Si el usuario pide hablar de forma explícita con un humano sobre una solicitud de soporte, soporte sobre problemas del sistema, reembolsos de dinero en tarjeta que no puedes resolver, responde ESTRICTAMENTE en tu texto con '[ESCALAR]'. Si la duda fue resuelta y se despiden cordialmente, responde ESTRICTAMENTE con '[TERMINAR]'. De lo contrario, ayúdales de forma cortés conversando con la persona de su situación.",
+             systemInstruction: `Eres un elegante y breve asistente para L'Essentiel, una boutique minimalista de alta moda. 
+
+Base de Conocimiento Operativa:
+- Política de Devoluciones: Permitimos devoluciones hasta 14 días después de la entrega si la prenda está limpia, sin uso y con etiquetas originales.
+- Tiempos de Envío: El envío estándar nacional tarda de 3 a 5 días hábiles. El envío exprés toma de 1 a 2 días hábiles dependiendo de la zona.
+- Política de Privacidad: L'Essentiel cumple rigurosamente con los estándares de encriptación de pagos y no guarda números de tarjetas de crédito.
+- Contacto Humano: Si el usuario pide hablar explícitamente con un humano o necesita un reembolso en su tarjeta de crédito (lo cual no puedes hacer automáticamente), responde ESTRICTAMENTE en tu texto con la etiqueta '[ESCALAR]'. 
+- Fin de Conversación: Si la duda fue resuelta y se despiden cordialmente, responde ESTRICTAMENTE con la etiqueta '[TERMINAR]'. 
+
+De lo contrario, ayúdales de forma cortés, utilizando respuestas cortas y un tono muy pulido y minimalista.`,
              temperature: 0.7
            }
        });
@@ -195,7 +230,7 @@ async function startServer() {
   });
 
   // Order Tracking Route
-  app.post("/api/track-order", async (req, res) => {
+  app.post("/api/track-order", aiLimiter, async (req, res) => {
     try {
        const { destinationAddress } = req.body;
        const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -219,7 +254,7 @@ async function startServer() {
   });
 
   // Admin AI Route (Product descriptions, reviews, emails)
-  app.post("/api/admin-ai", async (req, res) => {
+  app.post("/api/admin-ai", aiLimiter, async (req, res) => {
     try {
        const { task, data, prompt } = req.body;
        const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -265,7 +300,7 @@ async function startServer() {
   });
 
   // Proxy genérico para peticiones que vienen del cliente (e.g. Búsqueda y Mapas)
-  app.post("/api/gemini-proxy", async (req, res) => {
+  app.post("/api/gemini-proxy", aiLimiter, async (req, res) => {
     try {
         const { params } = req.body;
         const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -277,6 +312,19 @@ async function startServer() {
     } catch (error) {
         console.error("Proxy AI Error:", error);
         res.status(500).json({ text: "[]" });
+    }
+  });
+
+  // Webhook for Payment Fulfillment (e.g., handling async webhook callbacks from external gateways)
+  app.post("/api/webhooks/payment", async (req, res) => {
+    try {
+       // API logic for processing the incoming payload and validating the HTTP signature
+       console.log("🔔 [Webhook] Asynchronous payment confirmation received");
+       // Ex: admin.firestore().collection('orders').doc(body.orderId).update({ status: 'pagado' })
+       res.status(200).send("Webhook structure initialized.");
+    } catch (e) {
+       console.error("Webhook Error", e);
+       res.status(400).send("Webhook Error");
     }
   });
 

@@ -2,79 +2,95 @@
   "entities": {
     "Product": {
       "title": "Product",
-      "description": "A product available in the store",
+      "description": "Store products available for purchase",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "description": "Product name" },
-        "price": { "type": "number", "description": "Product price in dollars" },
-        "category": { "type": "string", "description": "Product category" },
-        "image": { "type": "string", "format": "uri", "description": "URL to the product image" },
-        "description": { "type": "string", "description": "Detailed description of the product" }
-      },
-      "required": ["name", "price", "category", "image", "description"]
-    },
-    "User": {
-      "title": "User",
-      "description": "User profile information",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "displayName": { "type": "string" },
-        "email": { "type": "string" },
-        "addresses": { 
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      },
-      "required": ["uid", "email"]
-    },
-    "Wishlist": {
-      "title": "Wishlist",
-      "description": "List of product IDs saved by the user",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string", "description": "User ID who owns this wishlist" },
-        "productIds": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      },
-      "required": ["uid", "productIds"]
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "sizes": { "type": "array" },
+        "colors": { "type": "array" },
+        "stock": { "type": "number" },
+        "createdAt": { "type": "string" }
+      }
     },
     "Order": {
-      "title": "Order",
-      "description": "Past order placed by a user",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "items": { 
-          "type": "string", 
-          "description": "Serialized JSON string of cart items to avoid complex map validation" 
-        },
-        "total": { "type": "number" },
-        "status": { "type": "string", "enum": ["procesando", "enviado", "entregado"] },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "address": { "type": "string" }
-      },
-      "required": ["userId", "items", "total", "status", "createdAt", "address"]
+        "title": "Order",
+        "description": "User purchases",
+        "type": "object",
+        "properties": {
+            "userId": { "type": "string" },
+            "userEmail": { "type": "string" },
+            "items": { "type": "string" },
+            "total": { "type": "number" },
+            "paymentMethod": { "type": "string" },
+            "transactionId": { "type": "string" },
+            "status": { "type": "string" },
+            "createdAt": { "type": "string" },
+            "address": { "type": "string" },
+            "discount": { "type": "string" }
+        }
+    },
+    "Chat": {
+        "title": "Chat",
+        "description": "Support chat",
+        "type": "object",
+        "properties": {
+            "userId": { "type": "string" },
+            "userName": { "type": "string" },
+            "userEmail": { "type": "string" },
+            "messages": { "type": "array" },
+            "status": { "type": "string" },
+            "lastUpdated": { "type": "string" }
+        }
+    },
+    "Promo": {
+        "title": "Promo",
+        "description": "Discount codes",
+        "type": "object",
+        "properties": {
+            "code": { "type": "string" },
+            "discountPercent": { "type": "number" },
+            "active": { "type": "boolean" },
+            "createdAt": { "type": "string" }
+        }
+    },
+    "User": {
+        "title": "User",
+        "description": "User profile",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "email": { "type": "string" },
+            "displayName": { "type": "string" },
+            "photoURL": { "type": "string" },
+            "role": { "type": "string" },
+            "createdAt": { "type": "string" }
+        }
     }
   },
   "firestore": {
-    "products": {
+    "/products/{productId}": {
       "schema": { "$ref": "#/entities/Product" },
-      "description": "Collection containing all store products"
+      "description": "Products list"
     },
-    "users": {
-      "schema": { "$ref": "#/entities/User" },
-      "description": "Collection of user profiles, document ID equals User UID"
-    },
-    "wishlists": {
-      "schema": { "$ref": "#/entities/Wishlist" },
-      "description": "User wishlists, document ID equals User UID"
-    },
-    "orders": {
+    "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/Order" },
-      "description": "Orders collection"
+      "description": "Completed orders"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Customer support chats"
+    },
+    "/promos/{promoId}": {
+      "schema": { "$ref": "#/entities/Promo" },
+      "description": "Discount codes"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
     }
   }
 }

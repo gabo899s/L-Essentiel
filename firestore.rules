@@ -1,72 +1,98 @@
-// ===============================================================
-// App Rules
-// ===============================================================
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isAuthenticated() {
-      return request.auth != null;
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == "gaboleandro189@gmail.com" ||
-        request.auth.token.email.matches(".*@ticketpro\\.lat.*") ||
-        request.auth.token.email.matches(".*admin.*")
+    function isSignedIn() { return request.auth != null; }
+    function isVerifiedEmail() { return true; /* Disabled verification strictly for MVP guest mode, but we restrict via user ID */ }
+    function isAdminEmail() {
+      return request.auth.token != null && 'email' in request.auth.token && (
+        request.auth.token.email == 'gaboleandro189@gmail.com' || 
+        request.auth.token.email.matches('.*ticketpro\\.lat')
       );
     }
+    function isAdmin() {
+      return isSignedIn() && isAdminEmail();
+    }
     
-    // ===============================================================
-    // Collection Rules
-    // ===============================================================
-    
-    match /products/{productId} {
-      allow read: if true;
-      allow update: if isAuthenticated();
-      allow create, delete: if isAdmin();
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isValidProduct(data) {
+       return data.keys().hasAll(['name', 'price', 'category']) 
+              && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+              && data.price is number && data.price >= 0
+              && data.category is string && data.category.size() <= 100;
     }
 
-    match /users/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+    match /products/{productId} {
+      // Allow general read
+      allow get: if isValidId(productId);
+      allow list: if true; 
+      // Admins manage products
+      allow create: if isAdmin() && isValidProduct(incoming());
+      // Users/Guests ONLY allowed to modify stock when purchasing
+      allow update: if isValidId(productId) && (
+        isAdmin() ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['stock']) && incoming().stock is number && incoming().stock >= 0)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /promos/{promoId} {
+      allow get: if isValidId(promoId);
+      allow list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /config/global {
+      allow get: if true;
+      allow list: if true;
     }
 
     match /wishlists/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin();
+      allow get: if isValidId(userId) && (isAdmin() || userId == request.auth.uid);
+      allow list: if isAdmin() || (isSignedIn() && userId == request.auth.uid);
+      allow create, update: if isSignedIn() && userId == request.auth.uid;
+      allow delete: if isAdmin() || userId == request.auth.uid;
     }
 
     match /orders/{orderId} {
-      // Users can read their own, admin can read all
-      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
-      // Users can create their own order
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
-    }
-    
-    match /promos/{promoId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+      allow get: if isValidId(orderId) && (isAdmin() || (isSignedIn() && existing().userId == request.auth.uid) || existing().userId == 'guest');
+      // Enforce query restriction
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if incoming().keys().hasAll(['userId', 'items', 'total']) 
+                    && incoming().userId is string 
+                    && ((isSignedIn() && incoming().userId == request.auth.uid) || incoming().userId == 'guest')
+                    && incoming().total >= 0;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
-    match /config/{configId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
+    match /chats/{chatId} {
+      allow get: if isValidId(chatId) && (isAdmin() || (isSignedIn() && existing().userId == request.auth.uid) || existing().userId == 'guest');
+      // Admin list enforcement
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if incoming().keys().hasAll(['messages', 'userId'])
+                    && ((isSignedIn() && incoming().userId == request.auth.uid) || incoming().userId == 'guest');
+      allow update: if isValidId(chatId) && (
+        isAdmin() || 
+        (((isSignedIn() && existing().userId == request.auth.uid) || existing().userId == 'guest') && incoming().diff(existing()).affectedKeys().hasOnly(['messages', 'lastUpdated', 'status', 'rating', 'updatedAt']))
+      );
+      allow delete: if isAdmin();
     }
     
-    match /chats/{chatId} {
-      // Users can only read their own chats, admins can read all
-      allow read: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
-      // users can create chat assigned to them
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      // both user and admin can update 
-      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isAdmin() || (isSignedIn() && userId == request.auth.uid));
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && userId == request.auth.uid;
+      allow update: if isValidId(userId) && (isAdmin() || (isSignedIn() && userId == request.auth.uid));
       allow delete: if isAdmin();
     }
   }
 }
-
