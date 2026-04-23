@@ -67,17 +67,35 @@ L.Icon.Default.mergeOptions({
 
 // --- TYPES ---
 type Review = { id: string; userId: string; userName: string; rating: number; text: string; date: string };
-type Product = { 
+export type ProductStatus = 'published' | 'draft' | 'hidden';
+
+export type Product = { 
   id: string; 
   name: string; 
   price: number; 
+  compareAtPrice?: number;
+  costPrice?: number;
   category: string; 
   image: string; 
+  images?: string[];
   description: string;
   sizes?: string[];
   colors?: string[];
-  stock?: number;
+  stock: number;
   reviews?: Review[];
+  sku?: string;
+  barcode?: string;
+  status?: ProductStatus;
+  slug?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  brand?: string;
+  tags?: string[];
+  weight?: number;
+  dimensions?: { length: number; width: number; height: number };
+  isDigital?: boolean;
+  minPurchaseQuantity?: number;
+  maxPurchaseQuantity?: number;
 };
 type CartItem = { product: Product; quantity: number; size?: string; color?: string };
 
@@ -1816,20 +1834,37 @@ export default function App() {
     
     // Admin Products State
     const [isAddingProduct, setIsAddingProduct] = useState(false);
-    const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: '', price: 0, category: '', image: '', description: '', stock: 0, sizes: [], colors: [] });
+    const [adminProductTab, setAdminProductTab] = useState<'general'|'pricing'|'shipping'|'seo'>('general');
+    const [newProduct, setNewProduct] = useState<Partial<Product>>({ 
+      name: '', price: 0, compareAtPrice: 0, costPrice: 0, category: '', 
+      image: '', images: [], description: '', stock: 0, sizes: [], colors: [], 
+      sku: '', barcode: '', status: 'published', slug: '', metaTitle: '', 
+      metaDescription: '', brand: '', tags: [], weight: 0, 
+      dimensions: { length: 0, width: 0, height: 0 }, 
+      isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100 
+    });
 
-    // Inputs for comma-separated sizes and colors
     const [sizesInput, setSizesInput] = useState('');
     const [colorsInput, setColorsInput] = useState('');
+    const [tagsInput, setTagsInput] = useState('');
+    const [imagesInput, setImagesInput] = useState('');
 
     const handleAddProduct = async (e: React.FormEvent) => {
       e.preventDefault();
       try {
+        let productSlug = newProduct.slug?.trim();
+        if (!productSlug && newProduct.name) {
+           productSlug = newProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        }
+
         const productToAdd = { 
           ...newProduct, 
           id: newProduct.id || Date.now().toString(),
+          slug: productSlug,
           sizes: sizesInput.split(',').map(s => s.trim()).filter(s => s),
-          colors: colorsInput.split(',').map(c => c.trim()).filter(c => c)
+          colors: colorsInput.split(',').map(c => c.trim()).filter(c => c),
+          tags: tagsInput.split(',').map(t => t.trim()).filter(t => t),
+          images: imagesInput.split(',').map(img => img.trim()).filter(img => img)
         } as Product;
         
         const existingProduct = products.find(p => p.id === productToAdd.id);
@@ -1840,11 +1875,9 @@ export default function App() {
         if (isRestock) {
           import('firebase/firestore').then(async ({ collection, getDocs, where, query, doc, getDoc }) => {
             try {
-              // Find all users who have this product in their wishlist
-              // Note: array-contains requires a specific query
               const wlSnap = await getDocs(query(collection(db, 'wishlists'), where('productIds', 'array-contains', productToAdd.id)));
               if (!wlSnap.empty) {
-                showToast(`Notificando restock a ${wlSnap.docs.length} usuario(s)...`);
+                import('sonner').then(({ toast }) => toast.info(`Notificando restock a ${wlSnap.docs.length} usuario(s)...`));
                 for (const wlDoc of wlSnap.docs) {
                   const uDoc = await getDoc(doc(db, 'users', wlDoc.id));
                   if (uDoc.exists() && uDoc.data().email) {
@@ -1868,12 +1901,14 @@ export default function App() {
         }
 
         setIsAddingProduct(false);
-        setNewProduct({ name: '', price: 0, category: '', image: '', description: '', stock: 0, sizes: [], colors: [] });
+        setNewProduct({ name: '', price: 0, compareAtPrice: 0, costPrice: 0, category: '', image: '', images: [], description: '', stock: 0, sizes: [], colors: [], sku: '', barcode: '', status: 'published', slug: '', metaTitle: '', metaDescription: '', brand: '', tags: [], weight: 0, dimensions: { length: 0, width: 0, height: 0 }, isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100 });
         setSizesInput('');
         setColorsInput('');
-        showToast('Producto guardado exitosamente');
+        setTagsInput('');
+        setImagesInput('');
+        import('sonner').then(({ toast }) => toast.success('Producto guardado exitosamente'));
       } catch (error) {
-        showToast('Error al guardar el producto');
+        import('sonner').then(({ toast }) => toast.error('Error al guardar el producto'));
       }
     };
 
@@ -1881,6 +1916,9 @@ export default function App() {
        setNewProduct(p);
        setSizesInput(p.sizes?.join(', ') || '');
        setColorsInput(p.colors?.join(', ') || '');
+       setTagsInput(p.tags?.join(', ') || '');
+       setImagesInput(p.images?.join(', ') || '');
+       setAdminProductTab('general');
        setIsAddingProduct(true);
        window.scrollTo(0, 0);
     };
@@ -1889,9 +1927,9 @@ export default function App() {
        if(!window.confirm('¿Seguro que deseas eliminar este producto?')) return;
        try {
          await deleteDoc(doc(db, 'products', id));
-         showToast('Producto eliminado');
+         import('sonner').then(({ toast }) => toast.success('Producto eliminado'));
        } catch (error) {
-         showToast('Error al eliminar');
+         import('sonner').then(({ toast }) => toast.error('Error al eliminar'));
        }
     };
 
@@ -2048,68 +2086,170 @@ export default function App() {
              </div>
 
              {isAddingProduct && (
-               <form onSubmit={handleAddProduct} className="bg-white p-8 border border-black/5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Nombre</label>
-                   <input required type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
+               <div className="bg-white border border-black/5 animate-in fade-in duration-300">
+                 <div className="flex border-b border-black/5 bg-gray-50/50 flex-wrap">
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('general'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'general' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>General</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('pricing'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'pricing' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Precio & Inventario</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('shipping'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'shipping' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Envío</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('seo'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'seo' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>SEO & Visibilidad</button>
                  </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Precio</label>
-                   <input required type="number" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Categoría</label>
-                   <input required type="text" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">URL de Imagen</label>
-                   <input required type="url" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Stock</label>
-                   <input required type="number" value={newProduct.stock || ''} onChange={e => setNewProduct({...newProduct, stock: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Tallas (separadas por coma)</label>
-                   <input type="text" value={sizesInput} onChange={e => setSizesInput(e.target.value)} placeholder="Ej: S, M, L" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div>
-                   <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Colores (separados por coma)</label>
-                   <input type="text" value={colorsInput} onChange={e => setColorsInput(e.target.value)} placeholder="Ej: Negro, Blanco" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none" />
-                 </div>
-                 <div className="md:col-span-2">
-                   <div className="flex justify-between items-center mb-2">
-                     <label className="text-[0.7rem] uppercase tracking-widest text-ink-light block">Descripción</label>
-                     <button 
-                       type="button" 
-                       onClick={async () => {
-                          if (!newProduct.name || !newProduct.category) {
-                             showToast("Ingresa nombre y categoría primero"); return;
-                          }
-                          showToast("Generando con IA...");
-                          try {
-                            const response = await ai.models.generateContent({
-                                model: "gemini-3-flash-preview",
-                                contents: `Genera una descripción de producto de alta conversión, minimalista y elegante para un producto llamado "${newProduct.name}" de la categoría "${newProduct.category}". Debe destacar exclusividad y lujo sutil. Solo devuelve la descripción en texto plano, sin formato markdown extra, máximo 3 párrafos cortos.`,
-                                config: { systemInstruction: "Eres un experto en e-commerce y marketing para L'Essentiel, una boutique minimalista de alta gama." }
-                            });
-                            setNewProduct(prev => ({...prev, description: response.text || ''}));
-                            showToast("Descripción generada ✨");
-                          } catch(e) {
-                            showToast("Error generando descripción");
-                          }
-                       }} 
-                       className="text-[0.65rem] uppercase tracking-widest text-ink flex items-center gap-1 hover:underline outline-none cursor-pointer"
-                     >
-                        <Sparkles size={12}/> Redactar con IA
+                 <form onSubmit={handleAddProduct} className="p-8">
+                   <div style={{ display: adminProductTab === 'general' ? 'grid' : 'none' }} className="grid-cols-1 md:grid-cols-2 gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Nombre del Producto *</label>
+                       <input required type="text" value={newProduct.name || ''} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Marca</label>
+                       <input type="text" value={newProduct.brand || ''} onChange={e => setNewProduct({...newProduct, brand: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Categoría *</label>
+                       <input required type="text" value={newProduct.category || ''} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Etiquetas (separadas por coma)</label>
+                       <input type="text" value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="Ej: nuevo, destacado, verano" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div className="md:col-span-2">
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">URL de Imagen Principal *</label>
+                       <input required type="url" value={newProduct.image || ''} onChange={e => setNewProduct({...newProduct, image: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div className="md:col-span-2">
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Imágenes Adicionales (URLs separadas por coma)</label>
+                       <textarea value={imagesInput} onChange={e => setImagesInput(e.target.value)} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 min-h-[60px] focus:border-ink transition-colors" />
+                     </div>
+                     <div className="md:col-span-2">
+                       <div className="flex justify-between items-center mb-2">
+                         <label className="text-[0.7rem] uppercase tracking-widest text-ink-light block">Descripción *</label>
+                         <button type="button" onClick={async () => {
+                              if (!newProduct.name || !newProduct.category) { import('sonner').then(({ toast }) => toast.error("Ingresa nombre y categoría primero")); return; }
+                              import('sonner').then(({ toast }) => toast.info("Generando con IA..."));
+                              try {
+                                const response = await ai.models.generateContent({
+                                    model: "gemini-3-flash-preview",
+                                    contents: `Genera una descripción de producto de alta conversión, minimalista y elegante para un producto llamado "${newProduct.name}" de la categoría "${newProduct.category}". Debe destacar exclusividad y lujo sutil. Solo devuelve la descripción en texto plano, sin formato markdown extra, máximo 3 párrafos cortos.`,
+                                    config: { systemInstruction: "Eres un experto en e-commerce y marketing para L'Essentiel, una boutique minimalista de alta gama." }
+                                });
+                                setNewProduct(prev => ({...prev, description: response.text || ''}));
+                                import('sonner').then(({ toast }) => toast.success("Descripción generada ✨"));
+                              } catch(e) { import('sonner').then(({ toast }) => toast.error("Error generando descripción")); }
+                           }} 
+                           className="text-[0.65rem] uppercase tracking-widest text-ink flex items-center gap-1 hover:underline outline-none cursor-pointer"
+                         ><Sparkles size={12}/> Redactar con IA</button>
+                       </div>
+                       <textarea required value={newProduct.description || ''} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none min-h-[150px] focus:border-ink transition-colors" />
+                     </div>
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'pricing' ? 'grid' : 'none' }} className="grid-cols-1 md:grid-cols-3 gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Precio de Venta *</label>
+                       <input required type="number" step="0.01" value={newProduct.price === undefined ? '' : newProduct.price} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Precio de Lista (Antes)</label>
+                       <input type="number" step="0.01" value={newProduct.compareAtPrice === undefined ? '' : newProduct.compareAtPrice} onChange={e => setNewProduct({...newProduct, compareAtPrice: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Costo Neto</label>
+                       <input type="number" step="0.01" value={newProduct.costPrice === undefined ? '' : newProduct.costPrice} onChange={e => setNewProduct({...newProduct, costPrice: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div className="col-span-full border-t border-black/5 mb-6 pt-6">
+                       <h3 className="font-serif italic text-ink text-[1.2rem] mb-4">Inventario</h3>
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">SKU</label>
+                       <input type="text" value={newProduct.sku || ''} onChange={e => setNewProduct({...newProduct, sku: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Código de Barras (EAN/UPC)</label>
+                       <input type="text" value={newProduct.barcode || ''} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Stock Disponible *</label>
+                       <input required type="number" value={newProduct.stock === undefined ? '' : newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none mb-6 focus:border-ink transition-colors" />
+                     </div>
+                     <div className="col-span-full md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
+                       <div>
+                         <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Variantes: Tallas (separadas por coma)</label>
+                         <input type="text" value={sizesInput} onChange={e => setSizesInput(e.target.value)} placeholder="Ej: S, M, L" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                       </div>
+                       <div>
+                         <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Variantes: Colores (separados por coma)</label>
+                         <input type="text" value={colorsInput} onChange={e => setColorsInput(e.target.value)} placeholder="Ej: Negro, Blanco" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                       </div>
+                     </div>
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'shipping' ? 'flex' : 'none' }} className="flex flex-col gap-8">
+                     <label className="flex items-center gap-3 cursor-pointer">
+                       <input type="checkbox" checked={newProduct.isDigital || false} onChange={e => setNewProduct({...newProduct, isDigital: e.target.checked})} className="w-4 h-4" />
+                       <span className="text-[0.85rem] text-ink">Este es un producto digital (no requiere envío)</span>
+                     </label>
+                     {!newProduct.isDigital && (
+                       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                         <div>
+                           <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Peso (kg)</label>
+                           <input type="number" step="0.01" value={newProduct.weight || ''} onChange={e => setNewProduct({...newProduct, weight: Number(e.target.value)})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                         </div>
+                         <div>
+                           <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Largo (cm)</label>
+                           <input type="number" step="0.1" value={newProduct.dimensions?.length || ''} onChange={e => setNewProduct({...newProduct, dimensions: {...(newProduct.dimensions||{width:0,height:0,length:0}), length: Number(e.target.value)}})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                         </div>
+                         <div>
+                           <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Ancho (cm)</label>
+                           <input type="number" step="0.1" value={newProduct.dimensions?.width || ''} onChange={e => setNewProduct({...newProduct, dimensions: {...(newProduct.dimensions||{width:0,height:0,length:0}), width: Number(e.target.value)}})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                         </div>
+                         <div>
+                           <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Alto (cm)</label>
+                           <input type="number" step="0.1" value={newProduct.dimensions?.height || ''} onChange={e => setNewProduct({...newProduct, dimensions: {...(newProduct.dimensions||{width:0,height:0,length:0}), height: Number(e.target.value)}})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'seo' ? 'flex' : 'none' }} className="flex flex-col gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Visibilidad</label>
+                       <select value={newProduct.status || 'published'} onChange={e => setNewProduct({...newProduct, status: e.target.value as any})} className="w-full md:w-1/3 border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors bg-white">
+                         <option value="published">Publicado</option>
+                         <option value="draft">Borrador</option>
+                         <option value="hidden">Oculto</option>
+                       </select>
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">URL amigable (Slug)</label>
+                       <input type="text" value={newProduct.slug || ''} onChange={e => setNewProduct({...newProduct, slug: e.target.value})} placeholder="ej: pantalon-lino-beige" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Meta Título (SEO)</label>
+                       <input type="text" value={newProduct.metaTitle || ''} onChange={e => setNewProduct({...newProduct, metaTitle: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                     </div>
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Meta Descripción (SEO)</label>
+                       <textarea value={newProduct.metaDescription || ''} onChange={e => setNewProduct({...newProduct, metaDescription: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none min-h-[100px] focus:border-ink transition-colors" />
+                     </div>
+                     {newProduct.metaTitle && (
+                       <div className="mt-4 p-4 border border-blue-200 bg-blue-50/30 rounded-md">
+                         <p className="text-[0.75rem] text-blue-800 uppercase tracking-widest mb-1">Previsualización en Google</p>
+                         <p className="text-[#1a0dab] text-[1.1rem] hover:underline cursor-pointer font-medium truncate">{newProduct.metaTitle}</p>
+                         <p className="text-[#006621] text-[0.8rem] mb-1">https://store.maesrp.lat/product/{newProduct.slug || newProduct.id}</p>
+                         <p className="text-[#545454] text-[0.85rem] truncate">{newProduct.metaDescription || newProduct.description?.substring(0, 150)}</p>
+                       </div>
+                     )}
+                   </div>
+
+                   <div className="mt-8 pt-8 border-t border-black/5 flex justify-end gap-4">
+                     <button type="button" onClick={() => setIsAddingProduct(false)} className="px-6 py-3 border border-black/10 text-ink text-[0.8rem] uppercase tracking-widest hover:bg-gray-50 transition">
+                       Cancelar
+                     </button>
+                     <button type="submit" className="bg-ink text-white px-10 py-3 text-[0.8rem] uppercase tracking-widest hover:bg-black transition">
+                       {newProduct.id ? 'Guardar Cambios' : 'Crear Producto'}
                      </button>
                    </div>
-                   <textarea required value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full border border-black/10 p-3 text-[0.85rem] outline-none min-h-[100px]" />
-                 </div>
-                 <button type="submit" className="md:col-span-2 bg-ink text-white py-3 text-[0.8rem] uppercase tracking-widest hover:bg-black">
-                   {newProduct.id ? 'Guardar Cambios' : 'Guardar Producto'}
-                 </button>
-               </form>
+                 </form>
+               </div>
              )}
 
              <div className="bg-white border border-black/5 p-6 overflow-x-auto">
