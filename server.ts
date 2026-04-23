@@ -22,6 +22,18 @@ async function startServer() {
     contentSecurityPolicy: false, // Disabling strict CSP in preview as it can block Vite HMR and dynamic scripts
   }));
 
+  // Redirect to store.maesrp.lat if domain is not localhost, store.maesrp.lat or run.app
+  app.use((req, res, next) => {
+    const host = req.get('host');
+    if (host && 
+        !host.includes('localhost') && 
+        !host.includes('run.app') && 
+        !host.includes('store.maesrp.lat')) {
+      return res.redirect(301, 'https://store.maesrp.lat' + req.originalUrl);
+    }
+    next();
+  });
+
   // Rate Limiting (Protects API routes from spam & bot abuse)
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes window
