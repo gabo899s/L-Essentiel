@@ -69,6 +69,16 @@ L.Icon.Default.mergeOptions({
 type Review = { id: string; userId: string; userName: string; rating: number; text: string; date: string };
 export type ProductStatus = 'published' | 'draft' | 'hidden';
 
+export type ProductVariant = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stock: number;
+};
+export type TieredPrice = { quantity: number; price: number; };
+export type CustomInput = { id: string; label: string; type: 'text' | 'select' | 'file'; options?: string; required: boolean; };
+
 export type Product = { 
   id: string; 
   name: string; 
@@ -96,6 +106,10 @@ export type Product = {
   isDigital?: boolean;
   minPurchaseQuantity?: number;
   maxPurchaseQuantity?: number;
+  variants?: ProductVariant[];
+  relatedProductIds?: string[];
+  tieredPrices?: TieredPrice[];
+  customInputs?: CustomInput[];
 };
 type CartItem = { product: Product; quantity: number; size?: string; color?: string };
 
@@ -668,7 +682,13 @@ export default function App() {
       showToast('Sesión iniciada correctamente');
     } catch (e: any) {
       console.error(e);
-      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión con Google', { description: e?.message || 'Intenta nuevamente más tarde.' }));
+      let desc = e?.message || 'Intenta nuevamente más tarde.';
+      if (e?.code === 'auth/unauthorized-domain') {
+         desc = 'Dominio no autorizado. Ve a Firebase Console > Authentication > Settings > Authorized domains y agrega este dominio.';
+      } else if (e?.code === 'auth/popup-closed-by-user') {
+         desc = 'El popup de inicio de sesión fue cerrado.';
+      }
+      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión con Google', { description: desc }));
     }
   };
 
@@ -685,9 +705,13 @@ export default function App() {
       showToast('Sesión iniciada correctamente');
     } catch (e: any) {
       console.error(e);
-      let desc = 'Recuerda configurar las llaves de X en Firebase Auth';
-      if (e?.code === 'auth/popup-closed-by-user') desc = 'El popup de inicio de sesión fue cerrado';
-      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión', { description: desc }));
+      let desc = e?.message || 'Recuerda configurar las llaves de X en Firebase Auth';
+      if (e?.code === 'auth/unauthorized-domain') {
+         desc = 'Dominio no autorizado. Ve a Firebase Console > Authentication > Settings > Authorized domains y agrega este dominio.';
+      } else if (e?.code === 'auth/popup-closed-by-user') {
+         desc = 'El popup de inicio de sesión fue cerrado.';
+      }
+      import('sonner').then(({ toast }) => toast.error('Error al iniciar sesión con X (Twitter)', { description: desc }));
     }
   };
 
@@ -1834,14 +1858,15 @@ export default function App() {
     
     // Admin Products State
     const [isAddingProduct, setIsAddingProduct] = useState(false);
-    const [adminProductTab, setAdminProductTab] = useState<'general'|'pricing'|'shipping'|'seo'>('general');
+    const [adminProductTab, setAdminProductTab] = useState<'general'|'pricing'|'shipping'|'seo'|'variants'|'associations'|'customization'>('general');
     const [newProduct, setNewProduct] = useState<Partial<Product>>({ 
       name: '', price: 0, compareAtPrice: 0, costPrice: 0, category: '', 
       image: '', images: [], description: '', stock: 0, sizes: [], colors: [], 
       sku: '', barcode: '', status: 'published', slug: '', metaTitle: '', 
       metaDescription: '', brand: '', tags: [], weight: 0, 
       dimensions: { length: 0, width: 0, height: 0 }, 
-      isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100 
+      isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100,
+      variants: [], customInputs: [], relatedProductIds: [], tieredPrices: []
     });
 
     const [sizesInput, setSizesInput] = useState('');
@@ -1901,7 +1926,7 @@ export default function App() {
         }
 
         setIsAddingProduct(false);
-        setNewProduct({ name: '', price: 0, compareAtPrice: 0, costPrice: 0, category: '', image: '', images: [], description: '', stock: 0, sizes: [], colors: [], sku: '', barcode: '', status: 'published', slug: '', metaTitle: '', metaDescription: '', brand: '', tags: [], weight: 0, dimensions: { length: 0, width: 0, height: 0 }, isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100 });
+        setNewProduct({ name: '', price: 0, compareAtPrice: 0, costPrice: 0, category: '', image: '', images: [], description: '', stock: 0, sizes: [], colors: [], sku: '', barcode: '', status: 'published', slug: '', metaTitle: '', metaDescription: '', brand: '', tags: [], weight: 0, dimensions: { length: 0, width: 0, height: 0 }, isDigital: false, minPurchaseQuantity: 1, maxPurchaseQuantity: 100, variants: [], customInputs: [], relatedProductIds: [], tieredPrices: [] });
         setSizesInput('');
         setColorsInput('');
         setTagsInput('');
@@ -2091,7 +2116,10 @@ export default function App() {
                    <button onClick={(e) => { e.preventDefault(); setAdminProductTab('general'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'general' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>General</button>
                    <button onClick={(e) => { e.preventDefault(); setAdminProductTab('pricing'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'pricing' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Precio & Inventario</button>
                    <button onClick={(e) => { e.preventDefault(); setAdminProductTab('shipping'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'shipping' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Envío</button>
-                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('seo'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'seo' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>SEO & Visibilidad</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('seo'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'seo' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>SEO</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('variants'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'variants' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Variantes</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('associations'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'associations' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Asociaciones</button>
+                   <button onClick={(e) => { e.preventDefault(); setAdminProductTab('customization'); }} className={`px-6 py-4 text-[0.75rem] uppercase tracking-widest transition-colors ${adminProductTab === 'customization' ? 'border-b-2 border-ink text-ink font-bold bg-white' : 'text-ink-light hover:bg-gray-100'}`}>Personalización</button>
                  </div>
                  <form onSubmit={handleAddProduct} className="p-8">
                    <div style={{ display: adminProductTab === 'general' ? 'grid' : 'none' }} className="grid-cols-1 md:grid-cols-2 gap-8">
@@ -2180,6 +2208,34 @@ export default function App() {
                          <input type="text" value={colorsInput} onChange={e => setColorsInput(e.target.value)} placeholder="Ej: Negro, Blanco" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
                        </div>
                      </div>
+                     <div className="col-span-full border-t border-black/5 mt-4 pt-6">
+                       <h3 className="font-serif italic text-ink text-[1.2rem] mb-4">Precios por Volumen / Reglas al por mayor</h3>
+                       <div className="bg-gray-50 p-4 border border-black/5 flex flex-col gap-4">
+                         {(newProduct.tieredPrices || []).map((tp, i) => (
+                           <div key={i} className="flex gap-4 items-center bg-white p-3 border border-black/5">
+                             <div className="flex flex-col">
+                               <label className="text-[0.65rem] uppercase text-ink-light mb-1">Cantidad mínima</label>
+                               <input type="number" placeholder="Ej: 5" value={tp.quantity || ''} onChange={e => {
+                                 const ntp = [...(newProduct.tieredPrices || [])]; ntp[i].quantity = Number(e.target.value); setNewProduct({...newProduct, tieredPrices: ntp});
+                               }} className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             </div>
+                             <div className="flex flex-col">
+                               <label className="text-[0.65rem] uppercase text-ink-light mb-1">Precio unitario</label>
+                               <input type="number" step="0.01" placeholder="Ej: 19.99" value={tp.price || ''} onChange={e => {
+                                 const ntp = [...(newProduct.tieredPrices || [])]; ntp[i].price = Number(e.target.value); setNewProduct({...newProduct, tieredPrices: ntp});
+                               }} className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             </div>
+                             <button type="button" onClick={() => {
+                               const ntp = (newProduct.tieredPrices || []).filter((_, index) => index !== i); setNewProduct({...newProduct, tieredPrices: ntp});
+                             }} className="text-red-500 text-[0.75rem] uppercase tracking-widest hover:underline mt-4">Eliminar</button>
+                           </div>
+                         ))}
+                         <button type="button" onClick={() => {
+                           const ntp = [...(newProduct.tieredPrices || []), { quantity: 5, price: (newProduct.price || 0) * 0.9 }];
+                           setNewProduct({...newProduct, tieredPrices: ntp});
+                         }} className="self-start text-[0.75rem] uppercase tracking-widest text-ink hover:underline">+ Agregar Rango de Precio</button>
+                       </div>
+                     </div>
                    </div>
 
                    <div style={{ display: adminProductTab === 'shipping' ? 'flex' : 'none' }} className="flex flex-col gap-8">
@@ -2238,6 +2294,90 @@ export default function App() {
                          <p className="text-[#545454] text-[0.85rem] truncate">{newProduct.metaDescription || newProduct.description?.substring(0, 150)}</p>
                        </div>
                      )}
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'variants' ? 'flex' : 'none' }} className="flex flex-col gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Variantes Avanzadas</label>
+                       <p className="text-[0.8rem] text-ink-light mb-4">Crea combinaciones de atributos (ej. Talla L + Color Rojo) con precio y SKU independientes.</p>
+                       <div className="bg-gray-50 p-4 border border-black/5 flex flex-col gap-4">
+                         {(newProduct.variants || []).map((v, i) => (
+                           <div key={v.id} className="grid grid-cols-5 gap-4 items-center bg-white p-3 border border-black/5">
+                             <input type="text" value={v.name} onChange={e => {
+                               const nv = [...(newProduct.variants || [])]; nv[i].name = e.target.value; setNewProduct({...newProduct, variants: nv});
+                             }} placeholder="Nombre variante" className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             <input type="text" value={v.sku} onChange={e => {
+                               const nv = [...(newProduct.variants || [])]; nv[i].sku = e.target.value; setNewProduct({...newProduct, variants: nv});
+                             }} placeholder="SKU" className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             <input type="number" value={v.price} onChange={e => {
+                               const nv = [...(newProduct.variants || [])]; nv[i].price = Number(e.target.value); setNewProduct({...newProduct, variants: nv});
+                             }} placeholder="Precio extra" className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             <input type="number" value={v.stock} onChange={e => {
+                               const nv = [...(newProduct.variants || [])]; nv[i].stock = Number(e.target.value); setNewProduct({...newProduct, variants: nv});
+                             }} placeholder="Stock" className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             <button type="button" onClick={() => {
+                               const nv = (newProduct.variants || []).filter((_, index) => index !== i); setNewProduct({...newProduct, variants: nv});
+                             }} className="text-red-500 text-[0.75rem] uppercase tracking-widest hover:underline">Eliminar</button>
+                           </div>
+                         ))}
+                         <button type="button" onClick={() => {
+                           const nv = [...(newProduct.variants || []), { id: Date.now().toString(), name: '', sku: '', price: 0, stock: 10 }];
+                           setNewProduct({...newProduct, variants: nv});
+                         }} className="self-start text-[0.75rem] uppercase tracking-widest text-ink hover:underline">+ Agregar Variante</button>
+                       </div>
+                     </div>
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'associations' ? 'flex' : 'none' }} className="flex flex-col gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Productos Relacionados (Cross-selling / Up-selling)</label>
+                       <p className="text-[0.8rem] text-ink-light mb-4">Selecciona los IDs de los productos que deseas mostrar como sugerencias.</p>
+                       <input type="text" value={(newProduct.relatedProductIds || []).join(', ')} onChange={e => {
+                         const ids = e.target.value.split(',').map(id => id.trim()).filter(id => id);
+                         setNewProduct({...newProduct, relatedProductIds: ids});
+                       }} placeholder="Ej: prod-1, prod-2" className="w-full border border-black/10 p-3 text-[0.85rem] outline-none focus:border-ink transition-colors" />
+                     </div>
+                   </div>
+
+                   <div style={{ display: adminProductTab === 'customization' ? 'flex' : 'none' }} className="flex flex-col gap-8">
+                     <div>
+                       <label className="text-[0.7rem] uppercase tracking-widest text-ink-light mb-2 block">Campos Personalizables (Impresión / Grabado / Textos libres)</label>
+                       <p className="text-[0.8rem] text-ink-light mb-4">Permite que tu cliente envíe un texto, un archivo, o seleccione opciones al comprar el producto.</p>
+                       <div className="bg-gray-50 p-4 border border-black/5 flex flex-col gap-4">
+                         {(newProduct.customInputs || []).map((ci, i) => (
+                           <div key={ci.id} className="grid grid-cols-4 gap-4 items-center bg-white p-3 border border-black/5">
+                             <input type="text" value={ci.label} onChange={e => {
+                               const nc = [...(newProduct.customInputs || [])]; nc[i].label = e.target.value; setNewProduct({...newProduct, customInputs: nc});
+                             }} placeholder="Etiqueta (Ej: Nombre a grabar)" className="border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             <select value={ci.type} onChange={e => {
+                               const nc = [...(newProduct.customInputs || [])]; nc[i].type = e.target.value as any; setNewProduct({...newProduct, customInputs: nc});
+                             }} className="border border-black/10 p-2 text-[0.8rem] outline-none bg-white">
+                               <option value="text">Texto Corto</option>
+                               <option value="file">Subir Archivo</option>
+                               <option value="select">Opciones (Dropdown)</option>
+                             </select>
+                             <label className="flex items-center gap-2">
+                               <input type="checkbox" checked={ci.required} onChange={e => {
+                                 const nc = [...(newProduct.customInputs || [])]; nc[i].required = e.target.checked; setNewProduct({...newProduct, customInputs: nc});
+                               }} />
+                               <span className="text-[0.7rem] uppercase tracking-widest">¿Requerido?</span>
+                             </label>
+                             <button type="button" onClick={() => {
+                               const nc = (newProduct.customInputs || []).filter((_, index) => index !== i); setNewProduct({...newProduct, customInputs: nc});
+                             }} className="text-red-500 text-[0.75rem] uppercase tracking-widest hover:underline text-right">Eliminar</button>
+                             {ci.type === 'select' && (
+                                <input type="text" value={ci.options || ''} onChange={e => {
+                                  const nc = [...(newProduct.customInputs || [])]; nc[i].options = e.target.value; setNewProduct({...newProduct, customInputs: nc});
+                                }} placeholder="Opciones separadas por coma" className="col-span-4 border border-black/10 p-2 text-[0.8rem] outline-none" />
+                             )}
+                           </div>
+                         ))}
+                         <button type="button" onClick={() => {
+                           const nc = [...(newProduct.customInputs || []), { id: Date.now().toString(), label: '', type: 'text', required: true }];
+                           setNewProduct({...newProduct, customInputs: nc} as Partial<Product>);
+                         }} className="self-start text-[0.75rem] uppercase tracking-widest text-ink hover:underline">+ Agregar Campo</button>
+                       </div>
+                     </div>
                    </div>
 
                    <div className="mt-8 pt-8 border-t border-black/5 flex justify-end gap-4">
